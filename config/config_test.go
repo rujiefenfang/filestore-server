@@ -2,14 +2,11 @@ package config
 
 import (
 	"fmt"
+	"golang.org/x/crypto/bcrypt"
 	"testing"
 )
 
-func TestInit(t *testing.T) {
-	err := InitConfig("./config.toml")
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	fmt.Println(Configs)
+func TestName(t *testing.T) {
+	password, _ := bcrypt.GenerateFromPassword([]byte("123456"), bcrypt.DefaultCost)
+	fmt.Println(string(password))
 }
