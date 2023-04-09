@@ -54,7 +54,10 @@ func PostSignIn(c *gin.Context) {
 	// 通过加密盐生成token，并过滤掉密码
 	token, err := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"username": user.Username,
+		//设置token过期时间
+		"exp": 3600 * 24 * 7,
 	}).SignedString(Secret)
+
 	if err != nil {
 		c.String(500, "Internal Server Error")
 		return

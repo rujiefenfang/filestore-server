@@ -20,6 +20,8 @@ func SetupRoutes(router *gin.Engine) {
 		group.GET("/home", Home)
 		// 获取用户信息
 		group.POST("/info", UserInfo)
+		// 查询用户文件列表
+		group.POST("/file/query", FilesQuery)
 	}
 	// 用户注册
 	router.GET("/user/signup", SignUp)
