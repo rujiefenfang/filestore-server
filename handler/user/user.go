@@ -1,4 +1,4 @@
-package handler
+package user
 
 import (
 	"github.com/gin-gonic/gin"
@@ -7,6 +7,7 @@ import (
 	"os"
 )
 
+// Home 用户首页
 func Home(c *gin.Context) {
 
 	content, err := os.ReadFile("./static/view/home.html")
@@ -17,10 +18,11 @@ func Home(c *gin.Context) {
 	c.Data(200, "text/html; charset=utf-8", content)
 }
 
-func UserInfo(c *gin.Context) {
+// Info 用户信息
+func Info(c *gin.Context) {
 
 	//上下文获取用户信息
-	user, exists := c.Get("username")
+	user, exists := c.Get("user")
 	if !exists {
 		c.String(500, "未通过认证，请重新登录")
 		return

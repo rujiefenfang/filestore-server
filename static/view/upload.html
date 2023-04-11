@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>文件分块上传</title>
+    <meta charset="utf-8">
+    <script>
+        function uploadFile() {
+            var fileInput = document.getElementById("fileInput");
+            var file = fileInput.files[0];
+            var fileSize = file.size;
+            var fileName = file.name;
+            var data = file.data;
+            var chunkSize = 1024 * 1024 * 10; // 分块大小为10MB
+
+            var xhr = new XMLHttpRequest();
+            xhr.open("POST", "/user/file/download");
+
+            xhr.setRequestHeader("Content-Type", "application/json;charset=utf-8");
+            xhr.onload = function () {
+                if (xhr.status === 200) {
+                    var response = JSON.parse(xhr.responseText);
+                    if (response.status === "ok") {
+                        var sessionId = response.sessionId;
+                        var startByte = 0;
+                        let count = 0;
+                        let channel = 10;
+                        while (startByte < fileSize) {
+                            const endByte = Math.min(startByte + chunkSize, fileSize);
+                            const chunk = file.slice(startByte, endByte);
+
+                            const formData = new FormData();
+                            formData.append("chunk", chunk);
+                            formData.append("startByte", startByte);
+                            formData.append("endByte", endByte.toString());
+                            formData.append("fileName", fileName);
+                            formData.append("count", count.toString());
+                            formData.append("sessionId", sessionId);
+                            count++;
+                            const request = new XMLHttpRequest();
+                            request.open("POST", "/user/file/uploadChunk");
+                            while(channel<=0)
+                            channel--
+                            request.send(formData);
+                            request.onload = function (){
+                                channel++
+                            }
+                            startByte = endByte;
+                        }
+                    } else {
+                        alert(response.message);
+                    }
+                } else {
+                    alert("上传文件信息失败，请重试！");
+                }
+            };
+
+            xhr.onerror = function () {
+                alert("上传文件信息失败，请重试！");
+            };
+
+            var fileData = JSON.stringify({
+                fileName: fileName,
+                fileSize: fileSize
+            });
+
+            xhr.send(fileData);
+        }
+    </script>
+</head>
+<body>
+<h1>文件分块上传</h1>
+<input type="file" id="fileInput">
+<br><br>
+<button onclick="uploadFile()">上传</button>
+</body>
+</html>

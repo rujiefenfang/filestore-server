@@ -44,7 +44,19 @@ func Close() error {
 	return mysqlDB.Close()
 }
 
+// TODO sql查询日志
+func sqlLog() {
+	//mysqlDB.LogMode(true)
+	//// log路径
+	//file, err := os.Open("./logs/sql.log")
+	//if err != nil {
+	//	panic(err)
+	//}
+	//mysqlDB.SetLogger(log.New(file, "\r\n", 0))
+}
+
 func mapper() {
 	mysqlDB.AutoMigrate(&model.FileMeta{})
 	mysqlDB.AutoMigrate(&model.User{})
+
 }

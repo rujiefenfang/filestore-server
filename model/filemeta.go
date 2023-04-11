@@ -11,6 +11,7 @@ type FileMeta struct {
 	FileName string `json:"fileName,omitempty"`
 	FileSize string `json:"fileSize,omitempty"`
 	Location string `json:"location,omitempty"`
+	UserId   uint   `json:"user_id,omitempty"`
 }
 
 var FileMetas map[string]FileMeta

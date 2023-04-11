@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>大文件切片上传+断点续传</title>
+    <meta charset="utf-8">
+    <script src="https://cdn.bootcdn.net/ajax/libs/axios/0.23.0/axios.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, Helvetica, sans-serif;
+            font-size: 16px;
+            background-color: #f7f7f7;
+        }
+
+        input[type=file] {
+            margin-bottom: 10px;
+        }
+
+        button {
+            padding: 10px 20px;
+            margin-right: 10px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+
+        button:hover {
+            background-color: #3e8e41;
+        }
+
+        #progress {
+            font-weight: bold;
+        }
+
+        .container {
+            width: 500px;
+            margin: 0 auto;
+            background-color: #fff;
+            border-radius: 4px;
+            padding: 20px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        p {
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>大文件切片上传+断点续传</h1>
+    <input type="file" id="file" name="file"><br>
+    <button onclick="startUpload()">开始上传</button>
+    <button onclick="pauseUpload()">暂停上传</button>
+    <button onclick="resumeUpload()">继续上传</button>
+    <button onclick="cancelUpload()">取消上传</button>
+    <br><br>
+    <p>进度：<span id="progress">0</span>%</p>
+    <p>状态：<span id="status">未开始</span></p>
+</div>
+
+</body>
+</html>
+<script>
+    // 获取文件名
+    let fileName = "";
+    let fileData = null;
+    document.getElementById("file").addEventListener("change", function (event) {
+        const file = event.target.files[0];
+        fileName = file.name;
+        fileData = file;
+        console.log("Selected file: " + fileName);
+    });
+
+    // 切片大小
+    const CHUNK_SIZE = 2 * 1024 * 1024; // 2MB
+
+    // 切片总数
+    let chunkCount = 0;
+
+    // 上传的切片
+    let uploadedChunks = [];
+
+    // 获取上传链接
+    async function getUploadUrl() {
+        const response = await axios.get("/user/get-upload-url", {
+            params: {
+                fileName: fileName,
+                chunkCount: chunkCount
+            }
+        });
+
+        return response.data.uploadUrl;
+    }
+
+    // 上传切片
+    async function uploadChunk(chunkData, chunkIndex, uploadUrl) {
+        const formData = new FormData();
+        formData.append("file", chunkData);
+        formData.append("chunkIndex", chunkIndex);
+
+        const config = {
+            headers: {
+                "Content-Type": "multipart/form-data"
+            },
+            onUploadProgress: function (progressEvent) {
+                const progress = Math.round((progressEvent.loaded / progressEvent.total) * 100);
+                document.getElementById("progress").innerHTML = progress;
+                document.getElementById("status").innerHTML = "上传中";
+            }
+        };
+
+        const response = await axios.post(uploadUrl, formData, config);
+        uploadedChunks.push(chunkIndex);
+        return response.data;
+    }
+
+    // 计算文件的sha1值
+    async function calculateSHA1(file) {
+        const buffer = await file.arrayBuffer(); // 将文件转换为 ArrayBuffer
+        const digest = await crypto.subtle.digest('SHA-1', buffer); // 计算 SHA-1 值
+        const hashArray = Array.from(new Uint8Array(digest)); // 将 SHA-1 值转换为 Uint8Array 类型的数组
+        const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join(''); // 将 Uint8Array 转换为十六进制字符串
+        return hashHex;
+    }
+
+    // 开始上传
+    async function startUpload() {
+        if (!fileData) {
+            console.error("No file selected!");
+            return;
+        }
+
+        // 计算文件的sha1值
+        const fileSha1 = await calculateSHA1(fileData);
+
+        chunkCount = Math.ceil(fileData.size / CHUNK_SIZE);
+        console.log("Selected file size: " + fileData.size + " bytes");
+        console.log("Chunk size: " + CHUNK_SIZE + " bytes");
+        console.log("Total chunks: " + chunkCount);
+
+        uploadedChunks = [];
+
+        // 上传文件信息进行校验是否之前已经上传过
+        const response = await axios({
+            method: "post",
+            url: "/user/check-file",
+            data: {
+                "fileName": fileName,
+                "fileSha1": fileSha1,
+                "chunkCount": chunkCount
+            }
+        });
+
+        // 如果文件已上传过
+        if (response.data.isExist) {
+            //上传完毕的切片
+            uploadedChunks = response.data.finishedChunks;
+        }
+
+        console.log("Uploaded chunks: " + uploadedChunks);
+        console.log("sha1: " + fileSha1);
+
+
+        // 上传连接池数量
+        let uploadUrlPoolSize = 6;
+
+        let startByte = 0;
+        let endByte = CHUNK_SIZE;
+
+        for (let i = 0; i < chunkCount; i++) {
+            const chunkData = fileData.slice(startByte, endByte);
+            const uploadUrl = await getUploadUrl();
+            // 如果该切片已上传，则跳过
+            if (uploadedChunks.includes(i)) {
+                console.log("Chunk " + i + " has already been uploaded.");
+                startByte += CHUNK_SIZE;
+                endByte += CHUNK_SIZE;
+                continue;
+            }
+            // 如果上传连接池已满，则等待
+            while (uploadUrlPoolSize <= 0) {
+                await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+            uploadUrlPoolSize--;
+
+            await uploadChunk(chunkData, i, uploadUrl);
+            console.log("Chunk " + i + " uploaded successfully.");
+            startByte += CHUNK_SIZE;
+            endByte += CHUNK_SIZE;
+
+            uploadUrlPoolSize++;
+        }
+        // 检查是否所有切片都已上传，向服务端发送是否上传完成的请求
+        const checkResponse = await axios({
+            method: "post",
+            url: "/user/check-file",
+            data: {
+                "fileName": fileName,
+                "fileSha1": fileSha1,
+                "chunkCount": chunkCount
+            }
+        });
+
+        if (checkResponse.data.isExist) {
+            // 上传完毕的切片
+            if (checkResponse.data.finishedChunks.length === chunkCount) {
+                console.log("All chunks uploaded.");
+                document.getElementById("status").innerHTML = "上传完成";
+                return;
+            }
+        }
+        await startUpload();
+    }
+
+    // 暂停上传
+    function pauseUpload() {
+        console.log("Upload paused.");
+        document.getElementById("status").innerHTML = "上传暂停";
+        // TODO: 在这里实现暂停上传的逻辑
+    }
+
+    // 继续上传
+    function resumeUpload() {
+        console.log("Upload resumed.");
+        document.getElementById("status").innerHTML = "上传中";
+        // TODO: 在这里实现继续上传的逻辑
+    }
+
+    // 取消上传
+    function cancelUpload() {
+        console.log("Upload cancelled.");
+        document.getElementById("status").innerHTML = "上传取消";
+        // TODO: 在这里实现取消上传的逻辑
+    }
+</script>

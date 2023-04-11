@@ -15,8 +15,15 @@ type Mysql struct {
 	//TimeOut string `json:"timeOut" toml:"timeOut"`
 }
 
+type Redis struct {
+	Host     string `json:"host" toml:"host"`
+	Port     string `json:"port" toml:"port"`
+	Password string `json:"password" toml:"password"`
+}
+
 type Config struct {
 	Mysql Mysql
+	Redis Redis
 }
 
 const tomlFile = "./config/config.toml"

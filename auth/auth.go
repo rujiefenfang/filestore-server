@@ -46,7 +46,7 @@ func MyAuth() gin.HandlerFunc {
 		// 通过用户信息获取用户权限
 
 		// 将用户信息保存到上下文中
-		c.Set("username", dbUser)
+		c.Set("user", dbUser)
 		return
 
 	}
