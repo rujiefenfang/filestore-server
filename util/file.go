@@ -2,7 +2,6 @@ package util
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"strconv"
 )
@@ -23,7 +22,7 @@ func MergeFile(fileName string, chunkCount int) {
 	// 合并切片
 	for i := 0; i < chunkCount; i++ {
 		chunkPath := fileName + "/" + strconv.Itoa(i)
-		chunkData, err := ioutil.ReadFile(chunkPath)
+		chunkData, err := os.ReadFile(chunkPath)
 		if err != nil {
 			fmt.Println("Failed to read chunk:", err)
 			return

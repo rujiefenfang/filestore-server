@@ -7,7 +7,6 @@ import (
 	"github.com/rujiefenfang/filestore-server/config"
 	"github.com/rujiefenfang/filestore-server/model"
 	"log"
-	"os"
 )
 
 var dsn string
@@ -24,7 +23,6 @@ func init() {
 	if err != nil {
 		fmt.Println(err)
 		log.Fatal(err)
-		os.Exit(1)
 	}
 	//映射表结构
 	mapper()
