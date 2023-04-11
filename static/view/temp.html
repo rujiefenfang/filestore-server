@@ -72,6 +72,7 @@
     // 获取文件名
     let fileName = "";
     let fileData = null;
+    let fileSha1 = "";
     document.getElementById("file").addEventListener("change", function (event) {
         const file = event.target.files[0];
         fileName = file.name;
@@ -93,7 +94,8 @@
         const response = await axios.get("/user/get-upload-url", {
             params: {
                 fileName: fileName,
-                chunkCount: chunkCount
+                chunkCount: chunkCount,
+                fileSha1: fileSha1
             }
         });
 
@@ -105,6 +107,7 @@
         const formData = new FormData();
         formData.append("file", chunkData);
         formData.append("chunkIndex", chunkIndex);
+        formData.append("fileSha1", fileSha1);
 
         const config = {
             headers: {
@@ -139,7 +142,7 @@
         }
 
         // 计算文件的sha1值
-        const fileSha1 = await calculateSHA1(fileData);
+        fileSha1 = await calculateSHA1(fileData);
 
         chunkCount = Math.ceil(fileData.size / CHUNK_SIZE);
         console.log("Selected file size: " + fileData.size + " bytes");
@@ -179,7 +182,7 @@
             const chunkData = fileData.slice(startByte, endByte);
             const uploadUrl = await getUploadUrl();
             // 如果该切片已上传，则跳过
-            if (uploadedChunks.includes(i)) {
+            if (uploadedChunks.includes(i.toString())) {
                 console.log("Chunk " + i + " has already been uploaded.");
                 startByte += CHUNK_SIZE;
                 endByte += CHUNK_SIZE;
