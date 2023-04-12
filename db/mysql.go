@@ -56,5 +56,6 @@ func sqlLog() {
 func mapper() {
 	mysqlDB.AutoMigrate(&model.FileMeta{})
 	mysqlDB.AutoMigrate(&model.User{})
+	mysqlDB.AutoMigrate(&model.FileUploadStatus{})
 
 }

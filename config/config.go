@@ -6,7 +6,7 @@ import (
 	"os"
 )
 
-type Mysql struct {
+type mysqlConfig struct {
 	Host     string `json:"host" toml:"host"`
 	Port     string `json:"port" toml:"port"`
 	UserName string `json:"userName" toml:"userName"`
@@ -15,20 +15,28 @@ type Mysql struct {
 	//TimeOut string `json:"timeOut" toml:"timeOut"`
 }
 
-type Redis struct {
+type redisConfig struct {
 	Host     string `json:"host" toml:"host"`
 	Port     string `json:"port" toml:"port"`
 	Password string `json:"password" toml:"password"`
 }
 
-type Config struct {
-	Mysql Mysql
-	Redis Redis
+type rabbitMQConfig struct {
+	Host     string `json:"host" toml:"host"`
+	Port     string `json:"port" toml:"port"`
+	UserName string `json:"userName" toml:"userName"`
+	Password string `json:"password" toml:"password"`
+}
+
+type config struct {
+	Mysql    mysqlConfig
+	Redis    redisConfig
+	RabbitMQ rabbitMQConfig
 }
 
 const tomlFile = "./config/config.toml"
 
-var Configs = Config{}
+var Configs = config{}
 
 func init() {
 
