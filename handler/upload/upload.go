@@ -2,12 +2,14 @@ package upload
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/gin-gonic/gin/binding"
 	"github.com/jinzhu/gorm"
 	"github.com/rujiefenfang/filestore-server/db"
 	"github.com/rujiefenfang/filestore-server/model"
+	"github.com/rujiefenfang/filestore-server/mq/megerfile"
 	"net/http"
 	"os"
 	"strconv"
@@ -40,7 +42,7 @@ func GetUploadUrl(c *gin.Context) {
 	}
 
 	// 返回上传链接
-	uploadUrl := "/user/upload?fileName=" + fileName + "&chunkCount=" + strconv.Itoa(chunkCount)
+	uploadUrl := "/user/upload?" + "chunkCount=" + strconv.Itoa(chunkCount)
 	c.JSON(http.StatusOK, gin.H{
 		"uploadUrl": uploadUrl,
 	})
@@ -48,8 +50,7 @@ func GetUploadUrl(c *gin.Context) {
 
 // Chunks 上传切片
 func Chunks(c *gin.Context) {
-	fileName := c.Query("fileName")
-
+	// 获取表单数据
 	form, _ := c.MultipartForm()
 	// 获取表单数据
 	valueMap := form.Value
@@ -57,6 +58,8 @@ func Chunks(c *gin.Context) {
 	chunkIndex := valueMap["chunkIndex"][0]
 	// 获取sha1
 	fileSha1 := valueMap["fileSha1"][0]
+	// 获取文件名
+	fileName := valueMap["fileName"][0]
 
 	// 获取文件
 	_, header, err := c.Request.FormFile("file")
@@ -129,71 +132,78 @@ func CheckFile(c *gin.Context) {
 	// 如果存在
 	if rowsAffected != 0 {
 
-		isExist = true
-
-		if first.Value.(*model.FileUploadStatus).Status == 2 {
-			for i := 0; i < checkFile.ChunkCount; i++ {
-				finishedChunks = append(finishedChunks, strconv.Itoa(i))
-			}
-			c.JSON(http.StatusOK, gin.H{
-				"status":         "OK",
-				"isExist":        isExist,
-				"finishedChunks": finishedChunks,
-			})
-			return
-		}
 		ctx := context.Background()
 		// 获取redis客户端
 		redis := db.GetRedis()
-		// 根据文件的sha1值，从数据库中查询记录,如果不存在者设置key=fileSha1，value=[]，并设置过期时间为1天
-		mGet := redis.LRange(ctx, checkFile.FileSha1, 0, -1)
-		// 如果存在,则获取已经上传的切片
-		if len(mGet.Val()) != 0 {
+
+		isExist = true
+
+		// 获取文件状态
+		status := first.Value.(*model.FileUploadStatus).Status
+
+		// 如果已经上传完成
+		if status == model.UploadFinish || status >= model.Merging {
+			for i := 0; i < checkFile.ChunkCount; i++ {
+				finishedChunks = append(finishedChunks, strconv.Itoa(i))
+			}
+			// 删除redis中的记录
+			redis.Del(ctx, checkFile.FileSha1)
+			if status == model.UploadFinish {
+				// 通知合并切片
+				err = megerfile.MergeFileProducer.PublishSimple(checkFile.FileSha1)
+			}
+		} else {
 			// 获取已经上传的切片
-			finishedChunks = mGet.Val()
-		}
-		//上传完成
-		if len(finishedChunks) == checkFile.ChunkCount {
-			//修改上传文件状态，将状态改为2，更新操作要在事务中
-			err := mysql.Transaction(func(tx *gorm.DB) error {
-				// 更新数据库中的记录
-				updateRaw := tx.Model(&model.FileUploadStatus{}).Where("file_sha1 = ?", checkFile.FileSha1).Update("status", 2).RowsAffected
+			mGet := redis.LRange(ctx, checkFile.FileSha1, 0, -1)
+			// 如果存在,则获取已经上传的切片
+			if len(mGet.Val()) != 0 {
+				// 获取已经上传的切片
+				finishedChunks = mGet.Val()
+			}
+			//上传完成
+			if len(finishedChunks) == checkFile.ChunkCount {
+				//修改上传文件状态，将状态改为2，更新操作要在事务中
+				err := mysql.Transaction(func(tx *gorm.DB) error {
+					// 更新数据库中的记录
+					updateRaw := tx.Model(&model.FileUploadStatus{}).Where("file_sha1 = ?", checkFile.FileSha1).Update("status", 2).RowsAffected
+					// 如果更新失败
+					if updateRaw == 0 {
+						return errors.New("update failed")
+					}
+					return nil
+				})
 				// 如果更新失败
-				if updateRaw == 0 {
+				if err != nil {
 					c.JSON(http.StatusInternalServerError, gin.H{
 						"status": "Failed",
 						"error":  err.Error(),
 					})
+					return
 				}
-				return nil
-			})
-			// 如果更新失败
-			if err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{
-					"status": "Failed",
-					"error":  err.Error(),
-				})
-				return
-			}
-			// 删除redis中的记录
-			redis.Del(ctx, checkFile.FileSha1)
 
-			//TODO:通知合并切片
+				// 删除redis中的记录
+				redis.Del(ctx, checkFile.FileSha1)
+
+				// 通知合并切片
+				err = megerfile.MergeFileProducer.PublishSimple(checkFile.FileSha1)
+
+				if err != nil {
+					c.JSON(http.StatusInternalServerError, gin.H{
+						"status": "Failed",
+						"error":  err.Error(),
+					})
+					return
+				}
+			}
 		}
-		// 返回已经上传的切片
-		c.JSON(http.StatusOK, gin.H{
-			"status":         "OK",
-			"isExist":        isExist,
-			"finishedChunks": finishedChunks,
-		})
-		return
 	} else {
 		// 如果不存在
 		// 将文件信息写入数据库
 		insertRaw := mysql.Create(&model.FileUploadStatus{
-			FileSha1: checkFile.FileSha1,
-			FileName: checkFile.FileName,
-			Status:   1,
+			FileSha1:   checkFile.FileSha1,
+			FileName:   checkFile.FileName,
+			ChunkCount: checkFile.ChunkCount,
+			Status:     1,
 		}).RowsAffected
 
 		// 如果插入失败
@@ -204,6 +214,7 @@ func CheckFile(c *gin.Context) {
 			})
 		}
 	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"status":         "OK",
 		"isExist":        isExist,
