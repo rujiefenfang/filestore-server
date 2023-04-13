@@ -21,7 +21,7 @@ func SetupRoutes(router *gin.Engine) {
 		// 获取用户信息
 		group.POST("/info", user.Info)
 		// 查询用户文件列表
-		group.POST("/file/query", files.FilesQuery)
+		group.POST("/file/query", files.Query)
 		// 文件上传
 		group.GET("/upload", upload.View)
 		group.GET("/get-upload-url", upload.GetUploadUrl)

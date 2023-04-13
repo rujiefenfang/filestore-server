@@ -1,6 +1,8 @@
 package mq
 
-import "github.com/streadway/amqp"
+import (
+	"github.com/streadway/amqp"
+)
 
 // Producer rabbitMq生产者
 type Producer struct {
@@ -190,4 +192,31 @@ func (c *Consumer) ConsumeSimple() (<-chan amqp.Delivery, error) {
 		return nil, err
 	}
 	return msg, nil
+}
+
+// Close 关闭链接
+func (c *Consumer) Close() error {
+	err := c.channel.Close()
+	if err != nil {
+		return err
+	}
+	err = c.conn.Close()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// ConsumeMessageHandler 设置消费者处理消息的函数
+func (c *Consumer) ConsumeMessageHandler(handler func(msg []byte)) error {
+	msg, err := c.ConsumeSimple()
+	if err != nil {
+		return err
+	}
+	go func() {
+		for d := range msg {
+			handler(d.Body)
+		}
+	}()
+	return nil
 }

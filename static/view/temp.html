@@ -108,6 +108,7 @@
         formData.append("file", chunkData);
         formData.append("chunkIndex", chunkIndex);
         formData.append("fileSha1", fileSha1);
+        formData.append("fileName", fileName);
 
         const config = {
             headers: {
@@ -179,15 +180,19 @@
         let endByte = CHUNK_SIZE;
 
         for (let i = 0; i < chunkCount; i++) {
-            const chunkData = fileData.slice(startByte, endByte);
-            const uploadUrl = await getUploadUrl();
+
             // 如果该切片已上传，则跳过
             if (uploadedChunks.includes(i.toString())) {
                 console.log("Chunk " + i + " has already been uploaded.");
                 startByte += CHUNK_SIZE;
                 endByte += CHUNK_SIZE;
+                const progress = Math.round((uploadedChunks.length / chunkCount) * 100);
+                document.getElementById("progress").innerHTML = progress.toString();
+                document.getElementById("status").innerHTML = "上传中";
                 continue;
             }
+            const chunkData = fileData.slice(startByte, endByte);
+            const uploadUrl = await getUploadUrl();
             // 如果上传连接池已满，则等待
             while (uploadUrlPoolSize <= 0) {
                 await new Promise(resolve => setTimeout(resolve, 1000));

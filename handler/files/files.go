@@ -6,7 +6,8 @@ import (
 	"github.com/rujiefenfang/filestore-server/model"
 )
 
-func FilesQuery(c *gin.Context) {
+// Query 获取文件列表
+func Query(c *gin.Context) {
 	user, exists := c.Get("user")
 	if !exists {
 		c.String(500, "未通过认证，请重新登录")
